@@ -166,6 +166,27 @@ button{cursor:pointer;font-family:inherit}
 .history-empty{text-align:center;padding:40px 20px;color:var(--text-muted);font-size:13px}
 .history-loading{text-align:center;padding:40px 20px}
 
+
+/* Fixed Quick Questions */
+.quick-bar{display:flex;flex-wrap:wrap;gap:6px;padding:8px 16px;border-bottom:1px solid var(--border);background:var(--bg-secondary);flex-shrink:0;min-height:0;transition:all .3s}
+.quick-bar:empty{display:none;padding:0;border:none;min-height:0}
+.quick-bar .quick-btn{font-size:12px;padding:5px 12px;border-radius:16px;border:1px solid var(--border-light);background:transparent;color:var(--text-secondary);transition:all .2s;white-space:nowrap}
+.quick-bar .quick-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+
+/* Markdown-like rendering for assistant messages */
+.msg-assistant h2,.msg-assistant h3{font-size:15px;font-weight:700;margin:12px 0 6px;color:var(--text-primary)}
+.msg-assistant h2:first-child,.msg-assistant h3:first-child{margin-top:0}
+.msg-assistant strong{color:var(--accent);font-weight:600}
+.msg-assistant p{margin:6px 0;line-height:1.7}
+.msg-assistant ul,.msg-assistant ol{padding-left:20px;margin:6px 0}
+.msg-assistant li{margin:4px 0;line-height:1.6}
+.msg-assistant code{background:var(--bg-primary);padding:2px 6px;border-radius:4px;font-size:13px;font-family:"JetBrains Mono",monospace}
+.msg-assistant hr{border:none;border-top:1px solid var(--border);margin:12px 0}
+.msg-assistant .risk-tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:10px;margin-left:4px;vertical-align:middle}
+.msg-assistant .risk-tag.high{background:var(--danger-dim);color:var(--danger)}
+.msg-assistant .risk-tag.medium{background:var(--warning-dim);color:var(--warning)}
+.msg-assistant .risk-tag.low{background:var(--success-dim);color:var(--success)}
+
 /* Responsive */
 @media(max-width:768px){
   .main{grid-template-columns:1fr;grid-template-rows:1fr 1fr}
@@ -218,6 +239,7 @@ button{cursor:pointer;font-family:inherit}
           <p>上传合同后即可开始问答</p>
         </div>
       </div>
+      <div class="quick-bar" id="quickBar"></div>
       <div class="chat-input-area">
         <div class="chat-input-wrap">
           <textarea id="chatInput" rows="1" placeholder="输入关于合同的问题..." disabled></textarea>
@@ -616,6 +638,7 @@ function uploadNew() {
   batchResults = [];
   $('sessionBadge').textContent = '';
   $('chatMessages').innerHTML = '<div class="chat-placeholder"><p>上传合同后即可开始问答</p></div>';
+  $('quickBar').innerHTML = '';
   disableChat();
   resetUploadZone();
 }
@@ -634,23 +657,25 @@ function disableChat() {
 function addQuickQuestions() {
   const placeholder = $('chatPlaceholder');
   if (placeholder) placeholder.remove();
-  
-  const existing = $('chatMessages').querySelector('.quick-questions');
-  if (existing) existing.remove();
 
-  const div = document.createElement('div');
-  div.className = 'welcome';
-  div.id = 'chatWelcome';
-  div.innerHTML = `
-    <h3>🤖 合同审查助手</h3>
-    <p>合同分析完成！您可以针对合同内容提出任何问题</p>
-    <div class="quick-questions">
-      <button class="quick-btn" onclick="askQuick(this)">这份合同有哪些主要风险？</button>
-      <button class="quick-btn" onclick="askQuick(this)">请解释关键条款</button>
-      <button class="quick-btn" onclick="askQuick(this)">建议如何修改风险条款？</button>
-      <button class="quick-btn" onclick="askQuick(this)">这份合同是否符合法律规定？</button>
-    </div>`;
-  $('chatMessages').appendChild(div);
+  // Populate the fixed quick bar
+  const bar = $('quickBar');
+  bar.innerHTML = `
+    <button class="quick-btn" onclick="askQuick(this)">这份合同有哪些主要风险？</button>
+    <button class="quick-btn" onclick="askQuick(this)">请解释关键条款</button>
+    <button class="quick-btn" onclick="askQuick(this)">建议如何修改风险条款？</button>
+    <button class="quick-btn" onclick="askQuick(this)">这份合同是否符合法律规定？</button>`;
+
+  // Add welcome message to chat if not already there
+  if (!$('chatWelcome')) {
+    const div = document.createElement('div');
+    div.className = 'welcome';
+    div.id = 'chatWelcome';
+    div.innerHTML = `
+      <h3>🤖 合同审查助手</h3>
+      <p>合同分析完成！您可以针对合同内容提出任何问题</p>`;
+    $('chatMessages').appendChild(div);
+  }
 }
 
 function askQuick(btn) {
@@ -715,7 +740,7 @@ async function sendMessage() {
           const data = JSON.parse(line.slice(6));
           if (data.content) {
             fullText += data.content;
-            aiDiv.querySelector('.msg-text').textContent = fullText;
+            aiDiv.querySelector('.msg-text').innerHTML = renderMd(fullText);
             scrollChat();
           }
         } catch {}
@@ -736,7 +761,8 @@ async function sendMessage() {
 function appendMsg(role, text, streaming=false) {
   const div = document.createElement('div');
   div.className = `msg msg-${role}`;
-  div.innerHTML = `<span class="msg-text">${esc(text)}</span>${streaming ? '<span class="cursor"></span>' : ''}`;
+  const rendered = role === 'assistant' ? renderMd(text) : esc(text);
+  div.innerHTML = `<span class="msg-text">${rendered}</span>${streaming ? '<span class="cursor"></span>' : ''}`;
   $('chatMessages').appendChild(div);
   scrollChat();
   return div;
@@ -752,6 +778,42 @@ function esc(s) {
   const d = document.createElement('div');
   d.textContent = s;
   return d.innerHTML;
+}
+
+function renderMd(text) {
+  if (!text) return '';
+  let html = esc(text);
+  // Headers
+  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+  // Bold
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // Inline code
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // Risk tags
+  html = html.replace(/🔴 高风险/g, '<span class="risk-tag high">🔴 高风险</span>');
+  html = html.replace(/🟡 中风险/g, '<span class="risk-tag medium">🟡 中风险</span>');
+  html = html.replace(/🟢 低风险/g, '<span class="risk-tag low">🟢 低风险</span>');
+  // HR
+  html = html.replace(/^---$/gm, '<hr>');
+  // Lists
+  html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+  html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
+  // Numbered lists
+  html = html.replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>');
+  // Paragraphs (convert double newlines)
+  html = html.replace(/\n\n/g, '</p><p>');
+  html = html.replace(/\n/g, '<br>');
+  html = '<p>' + html + '</p>';
+  // Clean up empty paragraphs
+  html = html.replace(/<p>\s*<\/p>/g, '');
+  html = html.replace(/<p>\s*(<h[23]>)/g, '$1');
+  html = html.replace(/(<\/h[23]>)\s*<\/p>/g, '$1');
+  html = html.replace(/<p>\s*(<ul>)/g, '$1');
+  html = html.replace(/(<\/ul>)\s*<\/p>/g, '$1');
+  html = html.replace(/<p>\s*(<hr>)/g, '$1');
+  html = html.replace(/(<hr>)\s*<\/p>/g, '$1');
+  return html;
 }
 
 // === History ===

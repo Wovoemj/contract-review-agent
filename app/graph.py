@@ -177,7 +177,7 @@ class ClauseExtractorNode:
         type_names = {
             "labor": "劳动合同", "rental": "租房合同", "procurement": "采购合同",
             "service": "技术服务合同", "nda": "保密协议", "internship": "实习协议"
-        }   
+        }
         
         prompt = f"""你是一个专业的合同审查助手。请从以下{type_names.get(contract_type, '合同')}中提取关键条款。
 
