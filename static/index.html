@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>合同审查Agent</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg-primary:#0f1117;--bg-secondary:#1a1b26;--bg-tertiary:#24253a;
+  --text-primary:#e1e4ed;--text-secondary:#9ca3af;--text-muted:#6b7280;
+  --accent:#6c5ce7;--accent-hover:#7c6cf7;--accent-dim:rgba(108,92,231,.15);
+  --border:#2d2f42;--border-light:#3d3f52;
+  --danger:#ef4444;--danger-dim:rgba(239,68,68,.12);
+  --warning:#f59e0b;--warning-dim:rgba(245,158,11,.12);
+  --success:#22c55e;--success-dim:rgba(34,197,94,.12);
+  --radius:8px;--radius-lg:12px;
+  --shadow:0 4px 24px rgba(0,0,0,.3);
+}
+html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg-primary);color:var(--text-primary)}
+a{color:var(--accent);text-decoration:none}
+button{cursor:pointer;font-family:inherit}
+
+/* Layout */
+.app{display:flex;flex-direction:column;height:100vh}
+.header{background:var(--bg-secondary);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;gap:12px;flex-shrink:0}
+.header h1{font-size:18px;font-weight:600;background:linear-gradient(135deg,var(--accent),#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.header .session-badge{font-size:12px;background:var(--accent-dim);color:var(--accent);padding:3px 10px;border-radius:20px;margin-left:auto}
+.header .session-badge:empty{display:none}
+
+.main{display:grid;grid-template-columns:1fr 1fr;flex:1;overflow:hidden}
+
+/* Panels */
+.panel{display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--border)}
+.panel:last-child{border-right:none}
+.panel-header{padding:14px 20px;border-bottom:1px solid var(--border);background:var(--bg-secondary);flex-shrink:0}
+.panel-header h2{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+.panel-body{flex:1;overflow-y:auto;padding:16px 20px}
+
+/* Upload area */
+.upload-zone{border:2px dashed var(--border-light);border-radius:var(--radius-lg);padding:48px 24px;text-align:center;transition:all .2s;cursor:pointer}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--accent);background:var(--accent-dim)}
+.upload-zone .icon{font-size:48px;margin-bottom:12px}
+.upload-zone h3{font-size:16px;margin-bottom:8px}
+.upload-zone p{font-size:13px;color:var(--text-secondary)}
+.upload-zone input{display:none}
+.upload-btns{display:flex;gap:10px;justify-content:center;margin-top:16px}
+.upload-btn{font-size:13px;padding:8px 18px;border-radius:var(--radius);border:1px solid var(--border-light);background:var(--bg-tertiary);color:var(--text-primary);transition:all .2s;display:flex;align-items:center;gap:6px}
+.upload-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+
+/* Batch progress */
+.batch-progress{text-align:center;padding:32px 24px}
+.batch-progress .spinner{margin:0 auto 12px}
+.batch-progress .batch-title{font-size:15px;font-weight:600;margin-bottom:8px}
+.batch-progress .batch-file{font-size:13px;color:var(--accent);margin-bottom:4px}
+.batch-progress .batch-count{font-size:12px;color:var(--text-muted)}
+.batch-progress .batch-bar{width:80%;max-width:300px;height:4px;background:var(--bg-secondary);border-radius:2px;margin:12px auto 0;overflow:hidden}
+.batch-progress .batch-bar-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .3s}
+
+/* Loading */
+.uploading{text-align:center;padding:48px 24px}
+.spinner{width:40px;height:40px;border:3px solid var(--border-light);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Batch results */
+.batch-results{padding:0}
+.batch-results .br-header{font-size:14px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.batch-results .br-item{background:var(--bg-tertiary);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;transition:all .2s;cursor:pointer;border-left:3px solid var(--border)}
+.batch-results .br-item:hover{background:var(--bg-secondary);border-left-color:var(--accent)}
+.batch-results .br-item.risk-high{border-left-color:var(--danger)}
+.batch-results .br-item.risk-medium{border-left-color:var(--warning)}
+.batch-results .br-item.risk-low{border-left-color:var(--success)}
+.batch-results .br-name{font-size:13px;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.batch-results .br-badges{display:flex;gap:6px;flex-shrink:0}
+.batch-results .br-badge{font-size:11px;padding:2px 8px;border-radius:10px}
+
+/* Analysis result */
+.analysis-card{background:var(--bg-tertiary);border-radius:var(--radius-lg);padding:16px;margin-bottom:12px}
+.analysis-header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.analysis-header .type-badge{font-size:13px;padding:4px 12px;border-radius:20px;background:var(--accent-dim);color:var(--accent)}
+.analysis-header .risk-badge{font-size:13px;padding:4px 12px;border-radius:20px;font-weight:600}
+.risk-high{background:var(--danger-dim);color:var(--danger)}
+.risk-medium{background:var(--warning-dim);color:var(--warning)}
+.risk-low{background:var(--success-dim);color:var(--success)}
+
+.risk-summary{font-size:13px;color:var(--text-secondary);line-height:1.7;padding:10px 14px;background:var(--bg-secondary);border-radius:var(--radius);border-left:3px solid var(--accent)}
+
+.risk-clauses{margin-top:12px}
+.risk-clause{background:var(--bg-secondary);border-radius:var(--radius);padding:14px;margin-bottom:8px;border-left:3px solid var(--border)}
+.risk-clause.level-high{border-left-color:var(--danger)}
+.risk-clause.level-medium{border-left-color:var(--warning)}
+.risk-clause.level-low{border-left-color:var(--success)}
+.risk-clause .clause-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.risk-clause .clause-title{font-size:13px;font-weight:600}
+.risk-clause .clause-risk{font-size:11px;padding:2px 8px;border-radius:10px}
+.risk-clause .clause-detail{font-size:12px;color:var(--text-secondary);line-height:1.6;margin-top:6px}
+.risk-clause .clause-detail dt{color:var(--text-muted);font-size:11px;margin-top:6px}
+.risk-clause .clause-detail dd{margin-top:2px}
+
+.section-title{font-size:13px;font-weight:600;color:var(--text-secondary);margin:16px 0 8px;display:flex;align-items:center;gap:6px}
+
+/* Chat */
+.chat-messages{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:12px}
+.msg{max-width:85%;padding:10px 14px;border-radius:var(--radius-lg);font-size:14px;line-height:1.7;word-break:break-word}
+.msg-user{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px}
+.msg-assistant{align-self:flex-start;background:var(--bg-tertiary);border-bottom-left-radius:4px}
+.msg-assistant .cursor{display:inline-block;width:2px;height:16px;background:var(--accent);animation:blink 1s step-end infinite;vertical-align:middle;margin-left:2px}
+@keyframes blink{50%{opacity:0}}
+
+.chat-input-area{padding:12px 16px;border-top:1px solid var(--border);background:var(--bg-secondary);flex-shrink:0}
+.chat-input-wrap{display:flex;gap:8px;align-items:flex-end}
+.chat-input-wrap textarea{flex:1;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-primary);padding:10px 14px;font-size:14px;font-family:inherit;resize:none;outline:none;max-height:120px;line-height:1.5}
+.chat-input-wrap textarea:focus{border-color:var(--accent)}
+.chat-input-wrap textarea::placeholder{color:var(--text-muted)}
+.send-btn{background:var(--accent);color:#fff;border:none;border-radius:var(--radius);padding:10px 20px;font-size:14px;font-weight:600;transition:background .2s;white-space:nowrap}
+.send-btn:hover{background:var(--accent-hover)}
+.send-btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* Welcome */
+.welcome{text-align:center;padding:40px 20px;color:var(--text-secondary)}
+.welcome h3{color:var(--text-primary);margin-bottom:8px}
+.welcome p{font-size:13px;line-height:1.6}
+.chat-placeholder{display:flex;flex:1;align-items:center;justify-content:center}
+.chat-placeholder p{color:var(--text-muted);font-size:14px}
+
+/* Actions */
+.actions{display:flex;gap:8px;margin-top:12px}
+.btn-small{font-size:12px;padding:6px 14px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);transition:all .2s}
+.btn-small:hover{border-color:var(--accent);color:var(--accent)}
+
+/* Quick questions */
+.quick-questions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.quick-btn{font-size:12px;padding:5px 12px;border-radius:16px;border:1px solid var(--border-light);background:transparent;color:var(--text-secondary);transition:all .2s}
+.quick-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+
+/* Toast */
+.toast-container{position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px}
+.toast{padding:10px 16px;border-radius:var(--radius);font-size:13px;color:#fff;box-shadow:var(--shadow);animation:slideIn .3s}
+.toast-error{background:var(--danger)}
+.toast-success{background:var(--success)}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+
+/* History Panel */
+.history-btn{font-size:12px;padding:4px 12px;border-radius:20px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:4px}
+.history-btn:hover{border-color:var(--accent);color:var(--accent)}
+.history-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:none;animation:fadeIn .2s}
+.history-overlay.open{display:flex;justify-content:flex-end}
+.history-panel{width:420px;max-width:90vw;background:var(--bg-secondary);border-left:1px solid var(--border);height:100%;display:flex;flex-direction:column;animation:slideLeft .2s}
+@keyframes slideLeft{from{transform:translateX(100%)}to{transform:translateX(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.history-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.history-header h3{font-size:15px;font-weight:600}
+.history-close{background:none;border:none;color:var(--text-secondary);font-size:20px;cursor:pointer;padding:4px 8px;border-radius:var(--radius)}
+.history-close:hover{color:var(--text-primary);background:var(--bg-tertiary)}
+.history-list{flex:1;overflow-y:auto;padding:12px}
+.history-item{padding:12px 14px;border-radius:var(--radius);border:1px solid var(--border);margin-bottom:8px;cursor:pointer;transition:all .2s}
+.history-item:hover{border-color:var(--accent);background:var(--accent-dim)}
+.history-item .hi-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.history-item .hi-name{font-size:13px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+.history-item .hi-risk{font-size:11px;padding:2px 8px;border-radius:10px}
+.history-item .hi-meta{font-size:11px;color:var(--text-muted);display:flex;gap:12px}
+.history-item .hi-summary{font-size:12px;color:var(--text-secondary);margin-top:6px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.history-item .hi-actions{display:flex;gap:6px;margin-top:8px}
+.history-item .hi-del{font-size:11px;padding:2px 8px;border-radius:var(--radius);border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;transition:all .2s}
+.history-item .hi-del:hover{border-color:var(--danger);color:var(--danger);background:var(--danger-dim)}
+.history-empty{text-align:center;padding:40px 20px;color:var(--text-muted);font-size:13px}
+.history-loading{text-align:center;padding:40px 20px}
+
+/* Responsive */
+@media(max-width:768px){
+  .main{grid-template-columns:1fr;grid-template-rows:1fr 1fr}
+  .panel{border-right:none;border-bottom:1px solid var(--border)}
+  .header h1{font-size:15px}
+  .msg{max-width:92%}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="header">
+    <h1>📄 合同审查Agent</h1>
+    <button class="history-btn" onclick="toggleHistory()" id="historyBtn">📜 历史记录</button>
+    <span class="session-badge" id="sessionBadge"></span>
+  </header>
+
+  <div class="main">
+    <!-- Left: Upload & Analysis -->
+    <div class="panel">
+      <div class="panel-header">
+        <h2>📋 合同分析</h2>
+      </div>
+      <div class="panel-body" id="leftPanel">
+        <div class="upload-zone" id="uploadZone">
+          <div class="icon">📁</div>
+          <h3>上传合同文件</h3>
+          <p>支持 PDF、TXT、MD、DOC/DOCX 等格式</p>
+          <div class="upload-btns">
+            <label class="upload-btn" onclick="event.stopPropagation()">
+              📄 选择文件
+              <input type="file" id="fileInput" accept=".pdf,.txt,.md,.doc,.docx,.json,.csv,.rtf" multiple>
+            </label>
+            <label class="upload-btn" onclick="event.stopPropagation()">
+              📂 选择文件夹
+              <input type="file" id="folderInput" webkitdirectory multiple>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Chat -->
+    <div class="panel">
+      <div class="panel-header">
+        <h2>💬 智能问答</h2>
+      </div>
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-placeholder" id="chatPlaceholder">
+          <p>上传合同后即可开始问答</p>
+        </div>
+      </div>
+      <div class="chat-input-area">
+        <div class="chat-input-wrap">
+          <textarea id="chatInput" rows="1" placeholder="输入关于合同的问题..." disabled></textarea>
+          <button class="send-btn" id="sendBtn" disabled>发送</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- History Panel -->
+<div class="history-overlay" id="historyOverlay" onclick="if(event.target===this)toggleHistory()">
+  <div class="history-panel">
+    <div class="history-header">
+      <h3>📜 历史记录</h3>
+      <button class="history-close" onclick="toggleHistory()">✕</button>
+    </div>
+    <div class="history-list" id="historyList">
+      <div class="history-empty">暂无历史记录</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// State
+let sessionId = null;
+let isStreaming = false;
+let batchResults = []; // [{filename, sessionId, data}]
+let currentView = 'upload'; // 'upload' | 'batch' | 'detail'
+
+const ALLOWED_EXTS = ['.pdf', '.txt', '.md', '.json', '.csv', '.rtf', '.doc', '.docx'];
+const ALLOWED_SET = new Set(ALLOWED_EXTS);
+
+function isAllowedFile(name) {
+  const ext = name.toLowerCase().slice(name.lastIndexOf('.'));
+  return ALLOWED_SET.has(ext);
+}
+
+// === Toast ===
+function toast(msg, type='error') {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  $('toastContainer').appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+// === Upload ===
+const uploadZone = $('uploadZone');
+const fileInput = $('fileInput');
+const folderInput = $('folderInput');
+
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('dragover');
+
+  // Check if folder was dropped (DataTransferItem.webkitGetAsEntry)
+  const items = e.dataTransfer.items;
+  if (items && items.length > 0 && items[0].webkitGetAsEntry) {
+    const entries = [];
+    for (let i = 0; i < items.length; i++) {
+      entries.push(items[i].webkitGetAsEntry());
+    }
+    collectFilesFromEntries(entries).then(files => {
+      if (files.length) handleFiles(files);
+      else toast('文件夹中没有找到支持的文件');
+    });
+  } else {
+    // Fallback: just use dataTransfer.files
+    const files = Array.from(e.dataTransfer.files).filter(f => isAllowedFile(f.name));
+    if (files.length) handleFiles(files);
+  }
+});
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length) {
+    const files = Array.from(fileInput.files).filter(f => isAllowedFile(f.name));
+    if (files.length) handleFiles(files);
+  }
+});
+
+folderInput.addEventListener('change', () => {
+  if (folderInput.files.length) {
+    const files = Array.from(folderInput.files).filter(f => isAllowedFile(f.name));
+    if (files.length) handleFiles(files);
+    else toast('文件夹中没有找到支持的文件');
+  }
+});
+
+// Recursively collect files from directory entries
+async function collectFilesFromEntries(entries) {
+  const files = [];
+  for (const entry of entries) {
+    if (entry.isFile) {
+      const file = await new Promise(resolve => entry.file(resolve));
+      if (isAllowedFile(file.name)) files.push(file);
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      const subEntries = await new Promise(resolve => reader.readEntries(resolve));
+      const subFiles = await collectFilesFromEntries(subEntries);
+      files.push(...subFiles);
+    }
+  }
+  return files;
+}
+
+// === Batch or Single ===
+async function handleFiles(files) {
+  // Filter out non-contract files (knowledge base, annotations)
+  const filtered = Array.from(files).filter(f => {
+    const name = f.name;
+    if (name.includes('风险标注') || name.includes('_annotation')) return false;
+    if (name.includes('知识库') || name.includes('FAQ') || name.includes('faq')) return false;
+    return true;
+  });
+  if (filtered.length === 0) {
+    toast('未找到可分析的合同文件（已跳过知识库和标注文件）');
+    return;
+  }
+  if (filtered.length < files.length) {
+    toast(`已过滤 ${files.length - filtered.length} 个非合同文件，分析 ${filtered.length} 个`, 'success');
+  }
+  if (filtered.length === 1) {
+    await handleSingleFile(filtered[0]);
+  } else {
+    await handleBatch(filtered);
+  }
+}
+
+async function handleSingleFile(file) {
+  showUploading(file.name);
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const res = await fetch('/api/contract/upload', { method: 'POST', body: form });
+    if (!res.ok) { const err = await res.json(); throw new Error(err.detail || '上传失败'); }
+    const data = await res.json();
+    sessionId = data.session_id;
+    $('sessionBadge').textContent = `会话: ${sessionId.slice(0,8)}`;
+    renderAnalysis(data);
+    enableChat();
+    toast('合同分析完成', 'success');
+  } catch (e) {
+    toast(e.message);
+    resetUploadZone();
+  }
+}
+
+async function handleBatch(files) {
+  batchResults = [];
+  currentView = 'batch';
+  showBatchProgress(files.length, files[0].name, 0);
+
+  let done = 0;
+  const uploadOne = async (file, idx) => {
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const res = await fetch('/api/contract/upload', { method: 'POST', body: form });
+      if (!res.ok) {
+        const err = await res.json();
+        return { filename: file.name, sessionId: null, error: err.detail || '上传失败' };
+      }
+      const data = await res.json();
+      return { filename: file.name, sessionId: data.session_id, data };
+    } catch (e) {
+      return { filename: file.name, sessionId: null, error: e.message };
+    }
+  };
+
+  // Parallel with concurrency limit (max 3)
+  const CONCURRENCY = 3;
+  let idx = 0;
+  batchResults = new Array(files.length);
+
+  const worker = async () => {
+    while (idx < files.length) {
+      const i = idx++;
+      const r = await uploadOne(files[i], i);
+      done++;
+      updateBatchProgress(r.filename, done, files.length);
+      batchResults[i] = r;
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, files.length) }, () => worker()));
+
+  // Use the last successful session as active
+  const lastSuccess = [...batchResults].reverse().find(r => r.sessionId);
+  if (lastSuccess) {
+    sessionId = lastSuccess.sessionId;
+    $('sessionBadge').textContent = `已分析 ${batchResults.length} 份`;
+    enableChat();
+  }
+
+  renderBatchResults();
+  toast(`批量分析完成: ${batchResults.filter(r=>r.sessionId).length}/${files.length} 成功`, 'success');
+}
+
+// === UI Helpers ===
+function showUploading(filename) {
+  $('leftPanel').innerHTML = `
+    <div class="uploading">
+      <div class="spinner"></div>
+      <p style="color:var(--text-secondary)">正在分析合同: ${esc(filename)}</p>
+      <p style="font-size:12px;color:var(--text-muted);margin-top:8px">请稍候，AI正在阅读并分析合同内容...</p>
+    </div>`;
+}
+
+function showBatchProgress(total, currentFile, current) {
+  $('leftPanel').innerHTML = `
+    <div class="batch-progress">
+      <div class="spinner"></div>
+      <div class="batch-title">批量分析合同</div>
+      <div class="batch-file">${esc(currentFile)}</div>
+      <div class="batch-count">${current} / ${total} 完成</div>
+      <div class="batch-bar"><div class="batch-bar-fill" id="batchBarFill" style="width:${(current/total*100).toFixed(0)}%"></div></div>
+    </div>`;
+}
+
+function updateBatchProgress(currentFile, current, total) {
+  const el = $('leftPanel');
+  const fileEl = el.querySelector('.batch-file');
+  const countEl = el.querySelector('.batch-count');
+  const fillEl = el.querySelector('.batch-bar-fill');
+  if (fileEl) fileEl.textContent = currentFile;
+  if (countEl) countEl.textContent = `${current} / ${total} 完成`;
+  if (fillEl) fillEl.style.width = `${(current/total*100).toFixed(0)}%`;
+}
+
+function resetUploadZone() {
+  $('leftPanel').innerHTML = `
+    <div class="upload-zone" id="uploadZone">
+      <div class="icon">📁</div>
+      <h3>上传合同文件</h3>
+      <p>支持 PDF、TXT、MD、DOC/DOCX 等格式</p>
+      <div class="upload-btns">
+        <label class="upload-btn" onclick="event.stopPropagation()">
+          📄 选择文件
+          <input type="file" id="fileInput" accept=".pdf,.txt,.md,.doc,.docx,.json,.csv,.rtf" multiple>
+        </label>
+        <label class="upload-btn" onclick="event.stopPropagation()">
+          📂 选择文件夹
+          <input type="file" id="folderInput" webkitdirectory multiple>
+        </label>
+      </div>
+    </div>`;
+  rebindUpload();
+}
+
+function rebindUpload() {
+  const zone = $('uploadZone');
+  const fi = $('fileInput');
+  const fo = $('folderInput');
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    const items = e.dataTransfer.items;
+    if (items && items.length > 0 && items[0].webkitGetAsEntry) {
+      const entries = [];
+      for (let i = 0; i < items.length; i++) entries.push(items[i].webkitGetAsEntry());
+      collectFilesFromEntries(entries).then(files => {
+        if (files.length) handleFiles(files);
+        else toast('文件夹中没有找到支持的文件');
+      });
+    } else {
+      const files = Array.from(e.dataTransfer.files).filter(f => isAllowedFile(f.name));
+      if (files.length) handleFiles(files);
+    }
+  });
+  fi.addEventListener('change', () => {
+    if (fi.files.length) {
+      const files = Array.from(fi.files).filter(f => isAllowedFile(f.name));
+      if (files.length) handleFiles(files);
+    }
+  });
+  fo.addEventListener('change', () => {
+    if (fo.files.length) {
+      const files = Array.from(fo.files).filter(f => isAllowedFile(f.name));
+      if (files.length) handleFiles(files);
+      else toast('文件夹中没有找到支持的文件');
+    }
+  });
+}
+
+// === Render Batch Results ===
+function renderBatchResults() {
+  const success = batchResults.filter(r => r.sessionId);
+  const failed = batchResults.filter(r => !r.sessionId);
+
+  let html = `<div class="batch-results">
+    <div class="br-header">📊 批量分析结果 (${success.length}/${batchResults.length} 成功)</div>`;
+
+  batchResults.forEach((r, idx) => {
+    if (!r.data) {
+      html += `<div class="br-item">
+        <span class="br-name" style="color:var(--danger)">❌ ${esc(r.filename)}</span>
+        <span class="br-badge" style="background:var(--danger-dim);color:var(--danger)">${esc(r.error)}</span>
+      </div>`;
+      return;
+    }
+    const a = r.data.analysis;
+    const riskCls = a.overall_risk_level;
+    html += `<div class="br-item risk-${riskCls}" onclick="showDetail(${idx})">
+      <span class="br-name">${esc(r.filename)}</span>
+      <span class="br-badge" style="background:var(--accent-dim);color:var(--accent)">${esc(a.contract_type_cn)}</span>
+      <span class="br-badge risk-${riskCls}">${riskLabel(a.overall_risk_level)}</span>
+      <span style="font-size:11px;color:var(--text-muted)">${a.risk_clauses.length}个风险</span>
+    </div>`;
+  });
+
+  html += `<div class="actions" style="margin-top:16px">
+    <button class="btn-small" onclick="uploadNew()">📄 上传新合同</button>
+  </div></div>`;
+
+  $('leftPanel').innerHTML = html;
+}
+
+function showDetail(idx) {
+  const r = batchResults[idx];
+  if (!r || !r.data) return;
+  sessionId = r.sessionId;
+  $('sessionBadge').textContent = r.filename.slice(0, 20);
+  // Clear chat for new session
+  $('chatMessages').innerHTML = '';
+  disableChat();
+  renderAnalysis(r.data);
+  enableChat();
+}
+
+// === Render Analysis ===
+function riskLabel(level) {
+  return { high: '高风险', medium: '中风险', low: '低风险' }[level] || level;
+}
+
+function renderAnalysis(data) {
+  const a = data.analysis;
+  let html = '';
+
+  // Back button if batch
+  if (batchResults.length > 1) {
+    html += `<div class="actions" style="margin-bottom:12px">
+      <button class="btn-small" onclick="renderBatchResults()">← 返回批量列表</button>
+    </div>`;
+  }
+
+  html += `<div class="analysis-card">
+    <div class="analysis-header">
+      <span class="type-badge">${esc(a.contract_type_cn)}</span>
+      <span class="risk-badge risk-${a.overall_risk_level}">${riskLabel(a.overall_risk_level)}</span>
+    </div>
+    <div class="risk-summary">${esc(a.risk_summary)}</div>
+  </div>`;
+
+  if (a.risk_clauses && a.risk_clauses.length) {
+    html += `<div class="section-title">⚠️ 风险条款 (${a.risk_clauses.length})</div>`;
+    html += '<div class="risk-clauses">';
+    a.risk_clauses.forEach(c => {
+      html += `<div class="risk-clause level-${c.risk_level}">
+        <div class="clause-header">
+          <span class="clause-title">${esc(c.clause_id)} ${esc(c.clause_title)}</span>
+          <span class="clause-risk risk-${c.risk_level}">${riskLabel(c.risk_level)}</span>
+        </div>
+        <div class="clause-detail">
+          <dl>
+            <dt>风险类型</dt><dd>${esc(c.risk_type)}</dd>
+            <dt>风险说明</dt><dd>${esc(c.description)}</dd>
+            <dt>修改建议</dt><dd>${esc(c.suggestion)}</dd>
+            <dt>法律依据</dt><dd>${esc(c.legal_basis)}</dd>
+          </dl>
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  html += `<div class="actions">
+    <button class="btn-small" onclick="uploadNew()">📄 上传新合同</button>
+  </div>`;
+
+  $('leftPanel').innerHTML = html;
+
+  // Show quick questions
+  addQuickQuestions();
+}
+
+function uploadNew() {
+  sessionId = null;
+  batchResults = [];
+  $('sessionBadge').textContent = '';
+  $('chatMessages').innerHTML = '<div class="chat-placeholder"><p>上传合同后即可开始问答</p></div>';
+  disableChat();
+  resetUploadZone();
+}
+
+// === Chat ===
+function enableChat() {
+  $('chatInput').disabled = false;
+  $('sendBtn').disabled = false;
+  $('chatPlaceholder')?.remove();
+}
+function disableChat() {
+  $('chatInput').disabled = true;
+  $('sendBtn').disabled = true;
+}
+
+function addQuickQuestions() {
+  const placeholder = $('chatPlaceholder');
+  if (placeholder) placeholder.remove();
+  
+  const existing = $('chatMessages').querySelector('.quick-questions');
+  if (existing) existing.remove();
+
+  const div = document.createElement('div');
+  div.className = 'welcome';
+  div.id = 'chatWelcome';
+  div.innerHTML = `
+    <h3>🤖 合同审查助手</h3>
+    <p>合同分析完成！您可以针对合同内容提出任何问题</p>
+    <div class="quick-questions">
+      <button class="quick-btn" onclick="askQuick(this)">这份合同有哪些主要风险？</button>
+      <button class="quick-btn" onclick="askQuick(this)">请解释关键条款</button>
+      <button class="quick-btn" onclick="askQuick(this)">建议如何修改风险条款？</button>
+      <button class="quick-btn" onclick="askQuick(this)">这份合同是否符合法律规定？</button>
+    </div>`;
+  $('chatMessages').appendChild(div);
+}
+
+function askQuick(btn) {
+  $('chatInput').value = btn.textContent;
+  sendMessage();
+}
+
+$('sendBtn').addEventListener('click', sendMessage);
+$('chatInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+$('chatInput').addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+});
+
+async function sendMessage() {
+  const input = $('chatInput');
+  const msg = input.value.trim();
+  if (!msg || !sessionId || isStreaming) return;
+
+  input.value = '';
+  input.style.height = 'auto';
+
+  const welcome = $('chatWelcome');
+  if (welcome) welcome.remove();
+
+  appendMsg('user', msg);
+  isStreaming = true;
+  $('sendBtn').disabled = true;
+
+  const aiDiv = appendMsg('assistant', '', true);
+
+  try {
+    const res = await fetch('/api/chat/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, message: msg })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || '请求失败');
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = '';
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (data.content) {
+            fullText += data.content;
+            aiDiv.querySelector('.msg-text').textContent = fullText;
+            scrollChat();
+          }
+        } catch {}
+      }
+    }
+  } catch (e) {
+    aiDiv.querySelector('.msg-text').textContent = `错误: ${e.message}`;
+    toast(e.message);
+  } finally {
+    const cursor = aiDiv.querySelector('.cursor');
+    if (cursor) cursor.remove();
+    isStreaming = false;
+    $('sendBtn').disabled = false;
+    scrollChat();
+  }
+}
+
+function appendMsg(role, text, streaming=false) {
+  const div = document.createElement('div');
+  div.className = `msg msg-${role}`;
+  div.innerHTML = `<span class="msg-text">${esc(text)}</span>${streaming ? '<span class="cursor"></span>' : ''}`;
+  $('chatMessages').appendChild(div);
+  scrollChat();
+  return div;
+}
+
+function scrollChat() {
+  const el = $('chatMessages');
+  el.scrollTop = el.scrollHeight;
+}
+
+function esc(s) {
+  if (!s) return '';
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// === History ===
+let historyOpen = false;
+
+function toggleHistory() {
+  historyOpen = !historyOpen;
+  const overlay = $('historyOverlay');
+  if (historyOpen) {
+    overlay.classList.add('open');
+    loadHistory();
+  } else {
+    overlay.classList.remove('open');
+  }
+}
+
+async function loadHistory() {
+  const list = $('historyList');
+  list.innerHTML = '<div class="history-loading"><div class="spinner"></div></div>';
+  try {
+    const res = await fetch('/api/sessions');
+    const data = await res.json();
+    if (data.length === 0) {
+      list.innerHTML = '<div class="history-empty">暂无历史记录<br><span style="font-size:11px;margin-top:4px;display:inline-block">上传合同分析后会自动保存</span></div>';
+      return;
+    }
+    list.innerHTML = data.map(s => {
+      const riskCls = s.overall_risk_level ? `risk-${s.overall_risk_level}` : '';
+      const riskLabel = { high: '高风险', medium: '中风险', low: '低风险' }[s.overall_risk_level] || '';
+      const date = new Date(s.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      return `<div class="history-item" onclick="loadSession('${s.session_id}')">
+        <div class="hi-top">
+          <span class="hi-name" title="${esc(s.filename)}">📄 ${esc(s.filename)}</span>
+          ${riskLabel ? `<span class="hi-risk risk-${s.overall_risk_level}">${riskLabel}</span>` : ''}
+        </div>
+        <div class="hi-meta">
+          <span>${s.contract_type_cn || '未分类'}</span>
+          <span>${s.risk_count !== undefined ? s.risk_count + '个风险' : ''}</span>
+          <span>${date}</span>
+        </div>
+        ${s.risk_summary ? `<div class="hi-summary">${esc(s.risk_summary)}</div>` : ''}
+        <div class="hi-actions">
+          <button class="hi-del" onclick="event.stopPropagation();deleteSession('${s.session_id}','${esc(s.filename)}')">🗑 删除</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    list.innerHTML = '<div class="history-empty">加载失败: ' + esc(e.message) + '</div>';
+  }
+}
+
+async function loadSession(sid) {
+  try {
+    const res = await fetch(`/api/sessions/${sid}`);
+    if (!res.ok) throw new Error('会话不存在');
+    const data = await res.json();
+
+    sessionId = sid;
+    $('sessionBadge').textContent = data.contract_filename.slice(0, 20);
+    $('chatMessages').innerHTML = '';
+    disableChat();
+
+    if (data.contract_analysis) {
+      renderAnalysis({ analysis: data.contract_analysis, session_id: sid });
+      enableChat();
+      // Restore chat messages
+      const msgs = data.messages || [];
+      for (const m of msgs) {
+        appendMsg(m.role, m.content);
+      }
+    }
+
+    toggleHistory();
+    toast('已加载历史记录', 'success');
+  } catch (e) {
+    toast('加载失败: ' + e.message);
+  }
+}
+
+async function deleteSession(sid, name) {
+  if (!confirm(`确定删除「${name}」？`)) return;
+  try {
+    await fetch(`/api/sessions/${sid}`, { method: 'DELETE' });
+    toast('已删除', 'success');
+    loadHistory();
+  } catch (e) {
+    toast('删除失败');
+  }
+}
+
+// Load history count on page load
+(async () => {
+  try {
+    const res = await fetch('/api/sessions');
+    const data = await res.json();
+    if (data.length > 0) {
+      $('historyBtn').textContent = `📜 历史 (${data.length})`;
+    }
+  } catch {}
+})();
+</script>
+</body>
+</html>

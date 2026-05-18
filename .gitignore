@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+.env
+data/chroma_db/
+data/uploads/
+data/history.json
+*.egg-info/
+.pytest_cache/
+.idea/
+.vscode/
