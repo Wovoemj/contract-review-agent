@@ -43,6 +43,7 @@ class ConversationSession(BaseModel):
     """对话会话"""
     session_id: str = Field(description="会话ID")
     contract_filename: Optional[str] = Field(description="合同文件名", default=None)
+    contract_text: Optional[str] = Field(description="合同原文", default=None)
     contract_analysis: Optional[ContractAnalysis] = Field(description="合同分析结果", default=None)
     messages: List[Message] = Field(description="对话历史", default_factory=list)
     created_at: datetime = Field(default_factory=datetime.now)

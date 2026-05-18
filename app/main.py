@@ -174,6 +174,7 @@ async def upload_contract(file: UploadFile = File(...)):
         
         # 更新会话
         session.contract_analysis = result.get("analysis")
+        session.contract_text = result.get("contract_text", "")
         session.messages.append(Message(
             role="assistant",
             content=result.get("response", "")
@@ -215,13 +216,13 @@ async def chat_stream(request: ChatRequest):
         state = {
             "session_id": session_id,
             "user_message": user_message,
-            "contract_text": session.contract_analysis.contract_type_cn if session.contract_analysis else "",
+            "contract_text": session.contract_text or "",
             "contract_filename": session.contract_filename,
             "contract_type": session.contract_analysis.contract_type if session.contract_analysis else None,
             "extracted_clauses": None,
             "risk_clauses": None,
             "retrieved_docs": None,
-            "analysis": session.contract_analysis,
+            "analysis": None,
             "response": "",
             "stream_chunks": [],
             "metadata": {},
